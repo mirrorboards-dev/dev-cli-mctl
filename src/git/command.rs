@@ -210,6 +210,15 @@ impl GitCommand {
         Self::new("rev-parse").work_dir(repo_path).arg("HEAD")
     }
 
+    /// Create a rev-parse command that resolves a revision or tag to its commit.
+    pub fn rev_parse_commit(repo_path: &Path, reference: &str) -> Self {
+        Self::new("rev-parse")
+            .work_dir(repo_path)
+            .flag("--verify")
+            .flag("--quiet")
+            .arg(format!("{}^{{commit}}", reference))
+    }
+
     /// Create a rev-parse command for short HEAD.
     pub fn rev_parse_head_short(repo_path: &Path) -> Self {
         Self::new("rev-parse")

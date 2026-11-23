@@ -409,6 +409,16 @@ impl GitClient {
         })
     }
 
+    /// Resolve a revision or tag to the full hash of its commit.
+    pub fn resolve_commit(&self, repo_path: &Path, reference: &str) -> GitResult<String> {
+        self.ensure_git_repo(repo_path)?;
+        let cmd = self.apply_config(GitCommand::rev_parse_commit(repo_path, reference));
+        let output = self.run_command(cmd)?;
+        parse_rev(&output).ok_or_else(|| GitError::ParseError {
+            message: format!("Failed to resolve {} to a commit", reference),
+        })
+    }
+
     /// Get HEAD commit hash (short).
     pub fn get_head_rev_short(&self, repo_path: &Path) -> GitResult<String> {
         self.ensure_git_repo(repo_path)?;

@@ -21,6 +21,33 @@ fn is_flat_without_checkout(repo: &Repository, local_path: &Path) -> bool {
     repo.flat && !local_path.join(".git").exists()
 }
 
+/// A repository pinned with `rev` or `tag` is checked out on a detached HEAD
+/// by design — `mctl sync` checks out the pinned commit, not a branch. When
+/// the checkout is clean and HEAD is exactly the pinned commit, it is at rest.
+/// A HEAD that moved away from the pin still needs attention.
+fn is_pinned_at_rest(repo: &Repository, local_path: &Path, status: &RepositoryStatus) -> bool {
+    let pinned_reference = match (&repo.rev, &repo.tag) {
+        (Some(rev), _) => rev.clone(),
+        (None, Some(tag)) => format!("refs/tags/{}", tag),
+        (None, None) => {
+            return false;
+        }
+    };
+
+    if !status.branch.is_detached() || !status.is_clean() {
+        return false;
+    }
+
+    let git = GitClient::new();
+    let head_commit = git.get_head_rev(local_path);
+    let pinned_commit = git.resolve_commit(local_path, &pinned_reference);
+
+    match (head_commit, pinned_commit) {
+        (Ok(head_commit), Ok(pinned_commit)) => head_commit == pinned_commit,
+        _ => false,
+    }
+}
+
 pub fn execute(
     config_path: &str,
     workspace: Option<String>,
@@ -77,12 +104,13 @@ pub fn execute(
             statuses
                 .into_iter()
                 .filter(|(repo, status)| {
-                    if is_flat_without_checkout(repo, &repo.resolve_local_path(config_file)) {
+                    let local_path = repo.resolve_local_path(config_file);
+                    if is_flat_without_checkout(repo, &local_path) {
                         return false;
                     }
                     status
                         .as_ref()
-                        .map(|s| !s.is_fully_synced())
+                        .map(|s| !s.is_fully_synced() && !is_pinned_at_rest(repo, &local_path, s))
                         .unwrap_or(true)
                 })
                 .collect()
@@ -148,13 +176,16 @@ pub fn execute(
             statuses
                 .into_iter()
                 .filter(|(repo, status, error)| {
-                    if is_flat_without_checkout(repo, &repo.resolve_local_path(config_file)) {
+                    let local_path = repo.resolve_local_path(config_file);
+                    if is_flat_without_checkout(repo, &local_path) {
                         return false;
                     }
                     error.is_some()
                         || status
                             .as_ref()
-                            .map(|s| !s.is_fully_synced())
+                            .map(|s| {
+                                !s.is_fully_synced() && !is_pinned_at_rest(repo, &local_path, s)
+                            })
                             .unwrap_or(true)
                 })
                 .collect()
