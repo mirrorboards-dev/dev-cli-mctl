@@ -14,6 +14,11 @@ pub const DEFAULT_CONFIG_FILE: &str = "mirror.toml";
 /// Default snapshot file name.
 pub const DEFAULT_SNAPSHOT_FILE: &str = "mirror.snapshot.toml";
 
+/// Comment lines `mctl from-org` writes at the top of a file it generates. They record where the
+/// entries came from, so a file holding nothing else counts as empty.
+pub const GENERATED_HEADER_PREFIXES: [&str; 2] =
+    ["# Generated with: mctl from-org ", "# Workspace: "];
+
 /// Remote configuration for syncing mirror.toml.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RemoteConfig {
@@ -375,9 +380,19 @@ impl ConfigManager {
         Ok(previous_rev)
     }
 
-    /// Whether the file holds nothing at all: no entries, no includes, no text.
+    /// Whether the file holds nothing: no entries, no includes, no text other than the header
+    /// `mctl from-org` generated. A comment someone wrote describes the file, so it keeps it.
     pub fn is_empty(&self) -> bool {
-        self.document.to_string().trim().is_empty()
+        let text = self.document.to_string();
+
+        text.lines().all(|line| {
+            let line = line.trim();
+            let is_generated_header = GENERATED_HEADER_PREFIXES
+                .iter()
+                .any(|prefix| line.starts_with(prefix));
+
+            line.is_empty() || is_generated_header
+        })
     }
 
     /// Drop `include_file` from `[includes].paths`.

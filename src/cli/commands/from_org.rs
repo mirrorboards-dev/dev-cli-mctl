@@ -6,7 +6,7 @@
 //! and pagination instead of embedding an HTTP client.
 
 use crate::cli::commands::{print_info, print_success};
-use crate::core::config::RawMirrorConfig;
+use crate::core::config::{RawMirrorConfig, GENERATED_HEADER_PREFIXES};
 use crate::core::repository::Repository;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
@@ -120,9 +120,10 @@ pub fn execute(
 
     let toml_content = toml::to_string_pretty(&config)?;
 
-    let mut header = format!("# Generated with: mctl from-org {}\n", org);
+    let [generated_prefix, workspace_prefix] = GENERATED_HEADER_PREFIXES;
+    let mut header = format!("{}{}\n", generated_prefix, org);
     if let Some(ws) = &workspace {
-        header.push_str(&format!("# Workspace: {}\n", ws));
+        header.push_str(&format!("{}{}\n", workspace_prefix, ws));
     }
     let final_content = format!("{}\n{}", header, toml_content);
 

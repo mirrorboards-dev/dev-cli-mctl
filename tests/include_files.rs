@@ -541,6 +541,45 @@ fn move_into_another_include_takes_the_checkout_and_the_entry_along(
 }
 
 #[test]
+fn moving_the_last_entry_out_of_a_generated_include_deletes_the_file(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+    write_mirror(root)?;
+
+    // A file `mctl from-org` wrote: its header says where the entries came from, nothing more.
+    let generated_include = r#"# Generated with: mctl from-org org
+
+[[repositories]]
+git = "git@github.com:org/chain.git"
+path = "group/chain"
+"#;
+    fs::write(root.join("mirrors/org.toml"), generated_include)?;
+    let listed = fs::read_to_string(root.join("mirror.toml"))?
+        .replace("paths = [", "paths = [\n    \"./mirrors/org.toml\",");
+    fs::write(root.join("mirror.toml"), listed)?;
+
+    let output = mctl(
+        root,
+        &[
+            "move",
+            "group/chain",
+            "renamed/chain",
+            "--include",
+            "./mirrors/renamed.toml",
+        ],
+    )?;
+    assert_success(&output, "mctl move");
+
+    assert!(!root.join("mirrors/org.toml").exists());
+    let config = fs::read_to_string(root.join("mirror.toml"))?;
+    assert!(!config.contains("./mirrors/org.toml"));
+    assert!(config.contains("./mirrors/renamed.toml"));
+
+    Ok(())
+}
+
+#[test]
 fn move_within_its_file_changes_only_the_path() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
